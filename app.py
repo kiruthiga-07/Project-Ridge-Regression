@@ -1,3 +1,5 @@
+# app.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,31 +11,60 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error, r2_score
 
-st.title("🏠 Housing Price Prediction (Ridge Regression)")
+# -----------------------------
+# Title
+# -----------------------------
+st.title("🏠 Housing Price Prediction using Ridge Regression")
 
 # -----------------------------
-# Load dataset
+# Upload Dataset (FIXED)
 # -----------------------------
-try:
-    df = pd.read_csv("housing.csv")
-except:
-    st.error("❌ Upload housing.csv to your GitHub repo")
+uploaded_file = st.file_uploader("Upload housing.csv file", type=["csv"])
+
+if uploaded_file is None:
+    st.warning("Please upload the housing.csv dataset to continue")
     st.stop()
 
-st.write("Dataset Preview", df.head())
+# Load dataset
+df = pd.read_csv(uploaded_file)
 
 # -----------------------------
-# Handle missing values
+# Preview
 # -----------------------------
+st.subheader("Dataset Preview")
+st.write(df.head())
+
+# -----------------------------
+# Missing Values
+# -----------------------------
+st.subheader("Missing Values")
+st.write(df.isnull().sum())
+
+# Fill missing values
 df.fillna(df.mean(numeric_only=True), inplace=True)
 
 # -----------------------------
-# Convert categorical
+# Convert Categorical
 # -----------------------------
 df = pd.get_dummies(df, columns=["ocean_proximity"], drop_first=True)
 
 # -----------------------------
-# Features & target
+# Statistics
+# -----------------------------
+st.subheader("Statistical Summary")
+st.write(df.describe())
+
+# -----------------------------
+# Correlation Heatmap
+# -----------------------------
+st.subheader("Correlation Heatmap")
+
+fig, ax = plt.subplots()
+sns.heatmap(df.corr(), cmap="coolwarm", ax=ax)
+st.pyplot(fig)
+
+# -----------------------------
+# Prepare Data
 # -----------------------------
 X = df.drop("median_house_value", axis=1)
 y = df["median_house_value"]
@@ -41,18 +72,21 @@ y = df["median_house_value"]
 feature_columns = X.columns  # IMPORTANT
 
 # -----------------------------
-# Split + Scale
+# Train Test Split
 # -----------------------------
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
 
+# -----------------------------
+# Scaling
+# -----------------------------
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
 # -----------------------------
-# Train model
+# Ridge Model
 # -----------------------------
 model = Ridge(alpha=1.0)
 model.fit(X_train_scaled, y_train)
@@ -62,21 +96,38 @@ model.fit(X_train_scaled, y_train)
 # -----------------------------
 y_pred = model.predict(X_test_scaled)
 
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
 st.subheader("Model Performance")
-st.write("MSE:", mean_squared_error(y_test, y_pred))
-st.write("R²:", r2_score(y_test, y_pred))
+st.write(f"MSE: {mse}")
+st.write(f"R² Score: {r2}")
 
 # -----------------------------
-# Plot
+# Feature Importance
 # -----------------------------
-fig, ax = plt.subplots()
-ax.scatter(y_test, y_pred)
-ax.set_xlabel("Actual")
-ax.set_ylabel("Predicted")
-st.pyplot(fig)
+st.subheader("Feature Importance (Coefficients)")
+
+coeff_df = pd.DataFrame({
+    "Feature": feature_columns,
+    "Coefficient": model.coef_
+}).sort_values(by="Coefficient", ascending=False)
+
+st.write(coeff_df)
 
 # -----------------------------
-# Prediction UI
+# Actual vs Predicted Plot
+# -----------------------------
+st.subheader("Actual vs Predicted")
+
+fig2, ax2 = plt.subplots()
+ax2.scatter(y_test, y_pred)
+ax2.set_xlabel("Actual Prices")
+ax2.set_ylabel("Predicted Prices")
+st.pyplot(fig2)
+
+# -----------------------------
+# Prediction Section
 # -----------------------------
 st.subheader("Predict House Price")
 
@@ -89,9 +140,15 @@ households = st.number_input("Households", 1, 5000, 1000)
 latitude = st.number_input("Latitude", 30.0, 45.0, 35.0)
 longitude = st.number_input("Longitude", -130.0, -110.0, -120.0)
 
-if st.button("Predict"):
+# -----------------------------
+# Prediction Logic (SAFE)
+# -----------------------------
+if st.button("Predict Price"):
+
+    # Create input template
     input_dict = {col: 0 for col in feature_columns}
 
+    # Fill values
     input_dict.update({
         "median_income": median_income,
         "housing_median_age": housing_median_age,
@@ -105,7 +162,8 @@ if st.button("Predict"):
 
     input_df = pd.DataFrame([input_dict])
 
+    # Scale + Predict
     input_scaled = scaler.transform(input_df)
     prediction = model.predict(input_scaled)
 
-    st.success(f"Predicted Price: ${prediction[0]:,.2f}")
+    st.success(f"Predicted House Price: ${prediction[0]:,.2f}")
